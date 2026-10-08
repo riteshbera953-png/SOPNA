@@ -1,0 +1,12 @@
+{
+  "name": "brothers-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Brothers Panel Render web service",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
