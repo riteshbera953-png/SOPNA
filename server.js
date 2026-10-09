@@ -4,8 +4,6 @@ const PORT = process.env.PORT || 10000;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHANNEL_ID;
 
-const lastRequests = new Map();
-
 function sendJson(res, status, data) {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -17,18 +15,14 @@ function sendJson(res, status, data) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
-    let size = 0;
 
     req.on("data", chunk => {
-      size += chunk.length;
+      body += chunk;
 
-      if (size > 10000) {
+      if (body.length > 10000) {
         reject(new Error("Request too large"));
         req.destroy();
-        return;
       }
-
-      body += chunk;
     });
 
     req.on("end", () => {
@@ -66,43 +60,25 @@ async function sendTelegram(message) {
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-    throw new Error("Telegram delivery failed");
+    throw new Error(result.description || "Telegram request failed");
   }
-
-  return true;
-}
-
-function rateLimited(req) {
-  const ip = String(
-    req.headers["x-forwarded-for"] ||
-    req.socket.remoteAddress ||
-    "unknown"
-  ).split(",")[0].trim();
-
-  const now = Date.now();
-  const previous = lastRequests.get(ip) || 0;
-
-  if (now - previous < 3000) return true;
-
-  lastRequests.set(ip, now);
-  return false;
 }
 
 const server = http.createServer(async (req, res) => {
-  const path = new URL(
+  const url = new URL(
     req.url,
     `http://${req.headers.host || "localhost"}`
-  ).pathname;
+  );
 
-  if (req.method === "GET" && path === "/") {
+  if (req.method === "GET" && url.pathname === "/") {
     return sendJson(res, 200, {
       ok: true,
-      service: "Firebase Event Notification",
+      service: "Firebase Connection Notifier",
       telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID)
     });
   }
 
-  if (req.method === "GET" && path === "/health") {
+  if (req.method === "GET" && url.pathname === "/health") {
     return sendJson(res, 200, {
       ok: true,
       telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID)
@@ -111,57 +87,31 @@ const server = http.createServer(async (req, res) => {
 
   if (
     req.method === "POST" &&
-    (
-      path === "/api/telegram/firebase-connected" ||
-      path === "/api/telegram/event"
-    )
+    url.pathname === "/api/telegram/firebase-connected"
   ) {
-    if (rateLimited(req)) {
-      return sendJson(res, 429, {
-        ok: false,
-        error: "Please wait before trying again"
-      });
-    }
-
     try {
       const data = await readBody(req);
 
-      let message;
-
-      if (path === "/api/telegram/firebase-connected") {
-        message = [
-          "Firebase connection notification",
-          "Status: Connected",
-          `Time: ${new Date().toISOString()}`
-        ].join("\n");
-      } else {
-        const allowedTypes = [
-          "application_event",
-          "status_update",
-          "new_notification"
-        ];
-
-        if (!allowedTypes.includes(data.eventType)) {
-          return sendJson(res, 400, {
-            ok: false,
-            error: "Unsupported event type"
-          });
-        }
-
-        const status = String(data.status || "updated").slice(0, 80);
-        const timestamp = String(
-          data.timestamp || new Date().toISOString()
-        ).slice(0, 80);
-
-        message = [
-          "Firebase Application Event",
-          `Type: ${data.eventType}`,
-          `Status: ${status}`,
-          `Time: ${timestamp}`
-        ].join("\n");
+      if (
+        typeof data.firebaseUrl !== "string" ||
+        !/^https:\/\/[a-z0-9-]+\.firebaseio\.com\/?$/i.test(
+          data.firebaseUrl
+        ) &&
+        !/^https:\/\/[a-z0-9-]+\.firebasedatabase\.app\/?$/i.test(
+          data.firebaseUrl
+        )
+      ) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: "Invalid Firebase Realtime Database URL"
+        });
       }
 
-      await sendTelegram(message);
+      await sendTelegram(
+        "Firebase connection notification\n" +
+        "Status: Connected\n" +
+        "Time: " + new Date().toISOString()
+      );
 
       return sendJson(res, 200, {
         ok: true,
@@ -184,5 +134,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
