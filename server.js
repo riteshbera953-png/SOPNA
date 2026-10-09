@@ -1,24 +1,51 @@
-const express = require("express");
-const admin = require("firebase-admin");
-
-const app = express();
-app.use(express.json());
+const http = require("http");
 
 const PORT = process.env.PORT || 10000;
-
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHANNEL_ID;
-const DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
-const FIREBASE_PATH = process.env.FIREBASE_PATH || "appNotifications";
-const SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-let db = null;
-let firebaseStatus = "disconnected";
-let telegramStatus = "disconnected";
+const lastRequests = new Map();
 
-async function sendTelegram(text) {
+function sendJson(res, status, data) {
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store"
+  });
+  res.end(JSON.stringify(data));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    let size = 0;
+
+    req.on("data", chunk => {
+      size += chunk.length;
+
+      if (size > 10000) {
+        reject(new Error("Request too large"));
+        req.destroy();
+        return;
+      }
+
+      body += chunk;
+    });
+
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(body || "{}"));
+      } catch {
+        reject(new Error("Invalid JSON"));
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
+
+async function sendTelegram(message) {
   if (!BOT_TOKEN || !CHAT_ID) {
-    throw new Error("Telegram environment variables are missing");
+    throw new Error("Telegram configuration missing");
   }
 
   const response = await fetch(
@@ -30,161 +57,132 @@ async function sendTelegram(text) {
       },
       body: JSON.stringify({
         chat_id: CHAT_ID,
-        text: text
-      })
+        text: message
+      }),
+      signal: AbortSignal.timeout(10000)
     }
   );
 
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-    throw new Error(result.description || "Telegram send failed");
+    throw new Error("Telegram delivery failed");
   }
 
-  telegramStatus = "connected";
-  return result;
+  return true;
 }
 
-app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    service: "Firebase Telegram Forwarder",
-    firebase: firebaseStatus,
-    telegram: telegramStatus
-  });
-});
+function rateLimited(req) {
+  const ip = String(
+    req.headers["x-forwarded-for"] ||
+    req.socket.remoteAddress ||
+    "unknown"
+  ).split(",")[0].trim();
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    firebaseConfigured: Boolean(db),
-    telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID),
-    firebaseStatus,
-    telegramStatus,
-    port: PORT
-  });
-});
+  const now = Date.now();
+  const previous = lastRequests.get(ip) || 0;
 
-app.get("/api/telegram/test", async (req, res) => {
-  try {
-    await sendTelegram("✅ Telegram connection test successful.");
-    res.json({
+  if (now - previous < 3000) return true;
+
+  lastRequests.set(ip, now);
+  return false;
+}
+
+const server = http.createServer(async (req, res) => {
+  const path = new URL(
+    req.url,
+    `http://${req.headers.host || "localhost"}`
+  ).pathname;
+
+  if (req.method === "GET" && path === "/") {
+    return sendJson(res, 200, {
       ok: true,
-      message: "Telegram test message sent"
-    });
-  } catch (error) {
-    console.error("Telegram test failed:", error.message);
-    res.status(500).json({
-      ok: false,
-      error: "Telegram message failed"
+      service: "Firebase Event Notification",
+      telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID)
     });
   }
-});
 
-async function startFirebaseListener() {
-  if (!DATABASE_URL || !SERVICE_ACCOUNT) {
-    console.log("Firebase credentials are not configured.");
-    return;
+  if (req.method === "GET" && path === "/health") {
+    return sendJson(res, 200, {
+      ok: true,
+      telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID)
+    });
   }
 
-  const serviceAccount = JSON.parse(SERVICE_ACCOUNT);
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: DATABASE_URL
-  });
-
-  db = admin.database();
-
-  const ref = db.ref(FIREBASE_PATH);
-  const knownIds = new Set();
-  const queuedEvents = [];
-
-  let ready = false;
-
-  async function processEvent(snapshot) {
-    if (!snapshot.key || knownIds.has(snapshot.key)) return;
-
-    knownIds.add(snapshot.key);
-
-    const data = snapshot.val();
-
-    if (!data || typeof data !== "object") return;
-
-    // Forward only approved, non-sensitive event metadata.
-    const eventType = String(data.eventType || "application_event")
-      .slice(0, 80);
-
-    const status = String(data.status || "updated")
-      .slice(0, 80);
-
-    const timestamp = String(data.timestamp || "")
-      .slice(0, 80);
-
-    const message = [
-      "🔔 New Firebase application event",
-      `Type: ${eventType}`,
-      `Status: ${status}`,
-      timestamp ? `Timestamp: ${timestamp}` : ""
-    ].filter(Boolean).join("\n");
+  if (
+    req.method === "POST" &&
+    (
+      path === "/api/telegram/firebase-connected" ||
+      path === "/api/telegram/event"
+    )
+  ) {
+    if (rateLimited(req)) {
+      return sendJson(res, 429, {
+        ok: false,
+        error: "Please wait before trying again"
+      });
+    }
 
     try {
+      const data = await readBody(req);
+
+      let message;
+
+      if (path === "/api/telegram/firebase-connected") {
+        message = [
+          "Firebase connection notification",
+          "Status: Connected",
+          `Time: ${new Date().toISOString()}`
+        ].join("\n");
+      } else {
+        const allowedTypes = [
+          "application_event",
+          "status_update",
+          "new_notification"
+        ];
+
+        if (!allowedTypes.includes(data.eventType)) {
+          return sendJson(res, 400, {
+            ok: false,
+            error: "Unsupported event type"
+          });
+        }
+
+        const status = String(data.status || "updated").slice(0, 80);
+        const timestamp = String(
+          data.timestamp || new Date().toISOString()
+        ).slice(0, 80);
+
+        message = [
+          "Firebase Application Event",
+          `Type: ${data.eventType}`,
+          `Status: ${status}`,
+          `Time: ${timestamp}`
+        ].join("\n");
+      }
+
       await sendTelegram(message);
-      console.log("Application event forwarded:", snapshot.key);
-    } catch (error) {
-      console.error("Forward failed:", error.message);
-    }
-  }
 
-  ref.on(
-    "child_added",
-    (snapshot) => {
-      if (!ready) {
-        queuedEvents.push(snapshot);
-        return;
-      }
-
-      processEvent(snapshot).catch((error) => {
-        console.error("Event processing error:", error.message);
+      return sendJson(res, 200, {
+        ok: true,
+        message: "Telegram notification sent"
       });
-    },
-    (error) => {
-      firebaseStatus = "error";
-      console.error("Firebase listener error:", error.message);
+    } catch (error) {
+      console.error("Notification error:", error.message);
+
+      return sendJson(res, 500, {
+        ok: false,
+        error: "Notification failed"
+      });
     }
-  );
-
-  try {
-    // Mark existing records so they are not forwarded on startup.
-    const initial = await ref.once("value");
-
-    initial.forEach((child) => {
-      knownIds.add(child.key);
-    });
-
-    ready = true;
-    firebaseStatus = "connected";
-
-    // Process only events that arrived during initialization.
-    for (const snapshot of queuedEvents) {
-      if (!knownIds.has(snapshot.key)) {
-        await processEvent(snapshot);
-      }
-    }
-
-    console.log("Firebase listener connected:", FIREBASE_PATH);
-  } catch (error) {
-    firebaseStatus = "error";
-    console.error("Firebase initialization failed:", error.message);
   }
-}
 
-app.listen(PORT, "0.0.0.0", async () => {
+  return sendJson(res, 404, {
+    ok: false,
+    error: "Not found"
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server listening on port ${PORT}`);
-
-  try {
-    await startFirebaseListener();
-  } catch (error) {
-    console.error("Startup error:", error.message);
-  }
 });
