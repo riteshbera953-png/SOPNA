@@ -1,13 +1,12 @@
 {
-  "name": "firebase-telegram-forwarder",
+  "name": "firebase-notification-backend",
   "version": "1.0.0",
-  "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "firebase-admin": "^13.5.0"
+    "axios": "^1.7.9",
+    "express": "^4.21.2"
   }
 }
