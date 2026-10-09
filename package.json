@@ -1,12 +1,13 @@
 {
-  "name": "brothers-panel",
+  "name": "firebase-telegram-forwarder",
   "version": "1.0.0",
   "private": true,
-  "description": "Brothers Panel Render web service",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
+  "dependencies": {
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0"
   }
 }
