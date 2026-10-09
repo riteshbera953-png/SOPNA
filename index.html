@@ -1,19 +1,35 @@
-<script>
-async function forwardFirebaseUrl(firebaseUrl) {
-  const response = await fetch(
-    "https://sopna-32z2.onrender.com/api/firebase/forward",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        firebaseUrl: firebaseUrl
-      })
-    }
-  );
+<input
+  id="firebaseUrl"
+  type="url"
+  placeholder="Enter your Firebase URL"
+/>
 
-  const result = await response.json();
-  console.log(result);
+<button onclick="testFirebase()">Test Connection</button>
+
+<p id="status"></p>
+
+<script>
+async function testFirebase() {
+  const input = document.getElementById("firebaseUrl");
+  const status = document.getElementById("status");
+
+  try {
+    const url = new URL(input.value.trim());
+
+    if (
+      url.protocol !== "https:" ||
+      !(
+        url.hostname.endsWith(".firebasedatabase.app") ||
+        url.hostname.endsWith(".firebaseio.com")
+      )
+    ) {
+      throw new Error("Invalid Firebase URL");
+    }
+
+    status.textContent =
+      "Firebase URL format valid. Connection permission still needs verification.";
+  } catch (error) {
+    status.textContent = error.message || "Invalid URL";
+  }
 }
 </script>
