@@ -1,87 +1,151 @@
-const express = require("express");
-const axios = require("axios");
+const http = require('http');
 
-const app = express();
-app.use(express.json({ limit: "10kb" }));
+const PORT = Number(process.env.PORT || 3000);
+const BOT_TOKEN =
+  process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
 
-const PORT = process.env.PORT || 10000;
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHANNEL_ID;
+const CHANNEL_ID =
+  process.env.TELEGRAM_CHANNEL_ID ||
+  process.env.CHANNEL_ID ||
+  process.env.TELEGRAM_CHAT_ID;
 
-app.get("/", (req, res) => {
-  res.send("Firebase Notification Backend is running");
-});
+function sendJson(res, status, data) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    telegramConfigured: Boolean(BOT_TOKEN && CHAT_ID)
+  res.end(JSON.stringify(data));
+}
+
+async function readJson(req) {
+  let body = '';
+
+  for await (const chunk of req) {
+    body += chunk;
+
+    if (body.length > 16384) {
+      throw new Error('Request body too large');
+    }
+  }
+
+  return body.trim() ? JSON.parse(body) : {};
+}
+
+async function sendTelegram(message) {
+  if (!BOT_TOKEN || !CHANNEL_ID) {
+    throw new Error('Telegram environment variables are missing');
+  }
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chat_id: CHANNEL_ID,
+        text: message,
+        disable_web_page_preview: true
+      })
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok || !result.ok) {
+    throw new Error(
+      result.description || 'Telegram delivery failed'
+    );
+  }
+
+  return result;
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(
+    req.url,
+    `http://${req.headers.host || 'localhost'}`
+  );
+
+  if (req.method === 'GET' && url.pathname === '/health') {
+    return sendJson(res, 200, {
+      ok: true,
+      telegramConfigured: Boolean(BOT_TOKEN && CHANNEL_ID)
+    });
+  }
+
+  if (
+    req.method === 'GET' &&
+    url.pathname === '/api/telegram/test'
+  ) {
+    try {
+      await sendTelegram(
+        'Brothers Panel\n\n' +
+        'Telegram Test\n' +
+        'Status: Connected'
+      );
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Test notification sent'
+      });
+    } catch (error) {
+      console.error('Telegram test failed:', error.message);
+
+      return sendJson(res, 500, {
+        ok: false,
+        error: error.message
+      });
+    }
+  }
+
+  if (
+    req.method === 'POST' &&
+    url.pathname === '/api/firebase/event'
+  ) {
+    try {
+      const payload = await readJson(req);
+
+      const event = String(
+        payload.event || 'Firebase connection established'
+      )
+        .replace(/[<>]/g, '')
+        .slice(0, 160);
+
+      const time = new Date();
+
+      await sendTelegram(
+        'Brothers Panel\n\n' +
+        'Firebase Connection Status\n' +
+        'Event: ' + event + '\n' +
+        'Time: ' + time.toISOString()
+      );
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Status notification sent'
+      });
+    } catch (error) {
+      console.error(
+        'Firebase status notification failed:',
+        error.message
+      );
+
+      return sendJson(res, 500, {
+        ok: false,
+        error: error.message
+      });
+    }
+  }
+
+  return sendJson(res, 404, {
+    ok: false,
+    error: 'Route not found'
   });
 });
 
-// Send a Telegram test notification
-app.get("/api/telegram/test", async (req, res) => {
-  if (!BOT_TOKEN || !CHAT_ID) {
-    return res.status(500).json({
-      ok: false,
-      error: "Telegram environment variables are missing"
-    });
-  }
-
-  try {
-    await axios.post(
-      `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-      {
-        chat_id: CHAT_ID,
-        text: "✅ Backend connected successfully!"
-      }
-    );
-
-    res.json({ ok: true, message: "Telegram test sent" });
-  } catch (error) {
-    res.status(502).json({
-      ok: false,
-      error: "Telegram message failed"
-    });
-  }
-});
-
-// Receive a non-sensitive application event
-app.post("/api/firebase/event", async (req, res) => {
-  if (!BOT_TOKEN || !CHAT_ID) {
-    return res.status(500).json({
-      ok: false,
-      error: "Telegram configuration missing"
-    });
-  }
-
-  const { event } = req.body || {};
-
-  if (typeof event !== "string" || event.length < 1 || event.length > 200) {
-    return res.status(400).json({
-      ok: false,
-      error: "Provide a short, non-sensitive event string"
-    });
-  }
-
-  try {
-    await axios.post(
-      `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-      {
-        chat_id: CHAT_ID,
-        text: `Firebase application event:\n${event}`
-      }
-    );
-
-    res.json({ ok: true });
-  } catch (error) {
-    res.status(502).json({
-      ok: false,
-      error: "Notification could not be sent"
-    });
-  }
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server listening on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });
