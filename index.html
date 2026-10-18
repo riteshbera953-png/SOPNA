@@ -5859,7 +5859,10 @@ fetch('/capture', {
 .then(r => r.json())
 .then(data => alert('Forward success: ' + JSON.stringify(data)))
 .cath(e => alert('Forward FAILED: ' + e.mesage));
-
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save & Connect';
+  }
 // ────────────────────────────────────────────────────────────────────────────
 // APK parsing (basic ZIP/APK scan for firebase URL + key in strings)
 // ────────────────────────────────────────────────────────────────────────────
