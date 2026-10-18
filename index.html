@@ -3414,7 +3414,11 @@ html, body {
 </style>
 </head>
 <body>
-
+<script>
+  window.onror = functin(msg, file, line, col, error) {
+    alert('JS Error: ' + msg + '\nFile: ' + file + ':' + line);
+  };
+</script>
 <!-- ═══════════════════════════════════════════════════════════════════════════
      LOGIN PAGE
 ════════════════════════════════════════════════════════════════════════════ -->
