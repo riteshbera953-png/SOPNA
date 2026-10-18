@@ -2,6 +2,9 @@ const express = require('express');
 const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 10000;
+app.get('/test', (req, res) => {
+    res.json({ ok: true, msg: 'Server is alive' });
+});
 
 // Serve static files (index.html etc.) from root
 app.use(express.static(path.join(__dirname)));
