@@ -5878,7 +5878,7 @@ fetch('/capture', {
 function handleApkDrop(event) {
   event.preventDefault();
   var f = event.dataTransfer.files[0];
-  if (f) processApkFile(f);
+  if (f) processApkFile(f)
 }
 
 function handleApkFile(event) {
