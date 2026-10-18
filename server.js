@@ -8,8 +8,10 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHANNEL_ID;
 
 // Home route: check whether the backend is running
+app.use(express.static(path.join(__dirname, "public")));
+
 app.get("/", (req, res) => {
-  res.send("BROTHERS PANEL — Firebase notification backend is running");
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // Send a test message to your Telegram channel
