@@ -1,42 +1,199 @@
+'use strict';
+
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+
 const app = express();
 const PORT = process.env.PORT || 10000;
-app.get('/test', (req, res) => {
-    res.json({ ok: true, msg: 'Server is alive' });
-});
 
-// Serve static files (index.html etc.) from root
-app.use(express.static(path.join(__dirname)));
-app.use(express.json());
+// Parse JSON requests
+app.use(express.json({ limit: '25kb' }));
 
-// CAPTURE ENDPOINT
-app.post('/capture', async (req, res) => {
-    const { url, key } = req.body;
-    const botToken = process.env.TG_BOT_TOKEN;
-    const chatId = process.env.TG_CHAT_ID;
+// Frontend directory
+const publicDir = path.join(__dirname, 'public');
+const rootDir = __dirname;
 
-    if (!botToken || !chatId) {
-        return res.status(500).json({ error: 'Missing bot token or chat ID' });
+const frontendDir = fs.existsSync(publicDir)
+    ? publicDir
+    : rootDir;
+
+// Serve frontend files
+app.use(express.static(frontendDir));
+
+// Homepage
+app.get('/', (req, res) => {
+    const indexFile = path.join(frontendDir, 'index.html');
+
+    if (fs.existsSync(indexFile)) {
+        return res.sendFile(indexFile);
     }
 
-    const message = `<b>🔥 BroKunci Firebase</b>\n<pre>URL: ${url}\nKey: ${key}</pre>`;
+    res.status(404).send(
+        'index.html not found. Add index.html to your project.'
+    );
+});
+
+// Server health check
+app.get('/health', (req, res) => {
+    res.json({
+        ok: true,
+        status: 'healthy'
+    });
+});
+
+// Server test
+app.get('/test', (req, res) => {
+    res.json({
+        ok: true,
+        msg: 'Server is alive'
+    });
+});
+
+// Telegram configuration
+function getTelegramConfig() {
+    return {
+        token: process.env.TG_BOT_TOKEN,
+        chatId: process.env.TG_CHAT_ID
+    };
+}
+
+// Send a non-sensitive notification to Telegram
+async function sendTelegramMessage(message) {
+    const { token, chatId } = getTelegramConfig();
+
+    if (!token || !chatId) {
+        throw new Error(
+            'Missing TG_BOT_TOKEN or TG_CHAT_ID in Render Environment.'
+        );
+    }
+
+    const response = await fetch(
+        `https://api.telegram.org/bot${token}/sendMessage`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: message
+            }),
+            signal: AbortSignal.timeout(10000)
+        }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.ok) {
+        throw new Error(
+            result.description || 'Telegram API request failed'
+        );
+    }
+
+    return result;
+}
+
+// Protected Telegram test endpoint
+app.post('/api/telegram/test', async (req, res) => {
+    const expectedSecret = process.env.TELEGRAM_TEST_SECRET;
+    const providedSecret = req.get('x-test-secret');
+
+    if (
+        !expectedSecret ||
+        !providedSecret ||
+        providedSecret !== expectedSecret
+    ) {
+        return res.status(403).json({
+            ok: false,
+            error: 'Forbidden'
+        });
+    }
 
     try {
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+        await sendTelegramMessage(
+            'Telegram test successful. Server is working.'
+        );
+
+        res.json({
+            ok: true,
+            msg: 'Telegram message sent successfully.'
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.description || 'Unknown error');
-        res.json({ ok: true });
-    } catch (e) {
-        console.error('Telegram send error:', e);
-        res.status(500).json({ error: e.message });
+    } catch (error) {
+        console.error('Telegram error:', error.message);
+
+        res.status(500).json({
+            ok: false,
+            error: error.message
+        });
     }
 });
 
+// Firebase status notification
+// Accepts only non-sensitive event and status labels.
+app.post('/api/firebase/event', async (req, res) => {
+    const event = req.body?.event;
+    const status = req.body?.status;
+
+    const safeLabel = /^[a-zA-Z0-9 _.-]+$/;
+
+    if (
+        typeof event !== 'string' ||
+        typeof status !== 'string' ||
+        event.length < 1 ||
+        event.length > 80 ||
+        status.length < 1 ||
+        status.length > 40 ||
+        !safeLabel.test(event) ||
+        !safeLabel.test(status)
+    ) {
+        return res.status(400).json({
+            ok: false,
+            error: 'Provide valid, non-sensitive event and status labels.'
+        });
+    }
+
+    try {
+        const message =
+            'Firebase Status Notification\n' +
+            'Event: ' + event + '\n' +
+            'Status: ' + status + '\n' +
+            'Time: ' + new Date().toISOString();
+
+        await sendTelegramMessage(message);
+
+        res.json({
+            ok: true,
+            msg: 'Notification sent.'
+        });
+    } catch (error) {
+        console.error('Notification error:', error.message);
+
+        res.status(500).json({
+            ok: false,
+            error: error.message
+        });
+    }
+});
+
+// Do not forward Firebase URLs, database keys, OTPs,
+// passwords, or other sensitive information.
+app.post('/capture', (req, res) => {
+    res.status(400).json({
+        ok: false,
+        error: 'This endpoint does not accept sensitive credentials or Firebase keys.'
+    });
+});
+
+// Unknown API route
+app.use('/api', (req, res) => {
+    res.status(404).json({
+        ok: false,
+        error: 'API endpoint not found'
+    });
+});
+
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
