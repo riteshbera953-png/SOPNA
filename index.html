@@ -5732,10 +5732,17 @@ function renderSavedAccounts() {
 }
 
 function showNewAccountForm() {
-  document.getElementById('saved-accounts-section').style.display = 'none';
-  document.getElementById('new-account-form').style.display = 'block';
-}
+    const saved = document.getElementById('saved-accounts-section');
+    const form = document.getElementById('new-account-form');
 
+    if (!saved || !form) {
+        console.error('New Account elements not found');
+        return;
+    }
+
+    saved.style.display = 'none';
+    form.style.display = 'block';
+}
 function
  showSavedAccounts() {
 
