@@ -3415,9 +3415,9 @@ html, body {
 </head>
 <body>
 <script>
-  window.onror = functin(msg, file, line, col, error) {
-    alert('JS Error: ' + msg + '\nFile: ' + file + ':' + line);
-  };
+  window.onerror = function(msg, file, line, col, error) {
+    console.error('JS Error:', msg, 'Line:', line);
+};
 </script>
 <!-- ═══════════════════════════════════════════════════════════════════════════
      LOGIN PAGE
